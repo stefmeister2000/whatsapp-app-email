@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Orvion Agent — Test Chat</title>
+<style>
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    background: #0b141a; height: 100vh; display: flex; justify-content: center;
+  }
+  .phone {
+    width: 100%; max-width: 480px; height: 100vh; display: flex; flex-direction: column;
+    background: #0b141a;
+  }
+  header {
+    background: #1f2c34; color: #e9edef; padding: 12px 16px;
+    display: flex; align-items: center; gap: 12px; flex-shrink: 0;
+  }
+  .avatar {
+    width: 40px; height: 40px; border-radius: 50%; background: #00a884;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; color: #fff; font-size: 16px;
+  }
+  header .name { font-weight: 600; font-size: 15px; }
+  header .status { font-size: 12px; color: #8696a0; }
+  header .reset {
+    margin-left: auto; background: none; border: 1px solid #8696a0; color: #8696a0;
+    border-radius: 6px; padding: 4px 10px; font-size: 12px; cursor: pointer;
+  }
+  #messages {
+    flex: 1; overflow-y: auto; padding: 16px 12px; display: flex; flex-direction: column; gap: 6px;
+    background: #0b141a url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="60" height="60" opacity="0.04"><circle cx="30" cy="30" r="1.5" fill="white"/></svg>');
+  }
+  .msg {
+    max-width: 80%; padding: 8px 12px; border-radius: 8px; font-size: 14.5px;
+    line-height: 1.4; white-space: pre-wrap; word-wrap: break-word; color: #e9edef;
+  }
+  .me { align-self: flex-end; background: #005c4b; border-top-right-radius: 0; }
+  .bot { align-self: flex-start; background: #1f2c34; border-top-left-radius: 0; }
+  .typing { color: #8696a0; font-style: italic; }
+  .err { align-self: center; background: #3b1f24; color: #f1aeb5; font-size: 13px; }
+  form {
+    display: flex; gap: 8px; padding: 10px 12px; background: #1f2c34; flex-shrink: 0;
+  }
+  input {
+    flex: 1; border: none; border-radius: 20px; padding: 11px 16px; font-size: 15px;
+    background: #2a3942; color: #e9edef; outline: none;
+  }
+  input::placeholder { color: #8696a0; }
+  button[type=submit] {
+    background: #00a884; border: none; border-radius: 50%; width: 44px; height: 44px;
+    color: #fff; font-size: 18px; cursor: pointer; flex-shrink: 0;
+  }
+  button:disabled { opacity: 0.5; }
+  #attach {
+    background: none; border: none; font-size: 20px; cursor: pointer; flex-shrink: 0;
+    width: 36px; align-self: center;
+  }
+  #attach.armed { filter: drop-shadow(0 0 4px #00a884); }
+  .msg img { max-width: 100%; border-radius: 6px; display: block; margin-bottom: 4px; }
+</style>
+</head>
+<body>
+<div class="phone">
+  <header>
+    <div class="avatar">O</div>
+    <div>
+      <div class="name">Orvion</div>
+      <div class="status">AI agent · local test (same brain as WhatsApp)</div>
+    </div>
+    <button class="reset" id="reset">Reset</button>
+  </header>
+  <div id="messages">
+    <div class="msg bot">Hello, welcome to Orvion. I can help with our treatments — weight loss, hair loss, men's health and peptides — as well as pricing, delivery and how to get started. How may I assist you today?</div>
+  </div>
+  <form id="form">
+    <button type="button" id="attach" title="Attach a photo">📎</button>
+    <input type="file" id="file" accept="image/jpeg,image/png,image/webp,image/gif" hidden />
+    <input id="input" placeholder="Message" autocomplete="off" autofocus />
+    <button type="submit" id="send">➤</button>
+  </form>
+</div>
+<script>
+  const messages = document.getElementById("messages");
+  const form = document.getElementById("form");
+  const input = document.getElementById("input");
+  const send = document.getElementById("send");
+
+  function add(cls, text) {
+    const div = document.createElement("div");
+    div.className = "msg " + cls;
+    // WhatsApp-style *bold*
+    div.textContent = text;
+    div.innerHTML = div.innerHTML.replace(/\*([^*\n]+)\*/g, "<b>$1</b>");
+    messages.appendChild(div);
+    messages.scrollTop = messages.scrollHeight;
+    return div;
+  }
+
+  const attach = document.getElementById("attach");
+  const fileInput = document.getElementById("file");
+  let pendingImage = null; // { data, mimeType }
+
+  attach.addEventListener("click", () => fileInput.click());
+  fileInput.addEventListener("change", () => {
+    const f = fileInput.files[0];
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      pendingImage = {
+        data: reader.result.split(",")[1],
+        mimeType: f.type,
+        preview: reader.result,
+      };
+      attach.classList.add("armed");
+      input.placeholder = "Add a caption (optional) and hit send";
+      input.focus();
+    };
+    reader.readAsDataURL(f);
+  });
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const text = input.value.trim();
+    if (!text && !pendingImage) return;
+    input.value = "";
+    input.placeholder = "Message";
+    const img = pendingImage;
+    pendingImage = null;
+    fileInput.value = "";
+    attach.classList.remove("armed");
+
+    const mine = add("me", text || "");
+    if (img) {
+      const el = document.createElement("img");
+      el.src = img.preview;
+      mine.prepend(el);
+    }
+    send.disabled = true;
+    const typing = add("bot typing", "typing…");
+    try {
+      const res = await fetch("/api/test-chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: text,
+          image: img ? { data: img.data, mimeType: img.mimeType } : undefined,
+        }),
+      });
+      const data = await res.json();
+      typing.remove();
+      if (!res.ok) add("err", data.error || "Something went wrong");
+      else add("bot", data.reply);
+    } catch (err) {
+      typing.remove();
+      add("err", "Could not reach the server: " + err.message);
+    } finally {
+      send.disabled = false;
+      input.focus();
+    }
+  });
+
+  document.getElementById("reset").addEventListener("click", async () => {
+    await fetch("/api/test-chat/reset", { method: "POST" });
+    messages.innerHTML = "";
+    add("bot", "Conversation reset. How can I help?");
+  });
+</script>
+</body>
+</html>

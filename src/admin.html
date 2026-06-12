@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Orvion — Inbox & Leads</title>
+<style>
+  * { box-sizing: border-box; margin: 0; font-family: -apple-system, "Segoe UI", Helvetica, sans-serif; }
+  body { background: #f0f2f5; height: 100vh; display: flex; flex-direction: column; }
+  header { background: #00795f; color: #fff; padding: 12px 20px; display: flex; align-items: center; gap: 16px; }
+  header h1 { font-size: 17px; font-weight: 600; }
+  .stats { display: flex; gap: 14px; margin-left: auto; font-size: 13px; opacity: 0.95; }
+  .stats b { font-size: 15px; }
+  nav { display: flex; gap: 4px; background: #fff; border-bottom: 1px solid #ddd; padding: 0 16px; }
+  nav button { border: none; background: none; padding: 12px 16px; font-size: 14px; cursor: pointer; border-bottom: 2px solid transparent; color: #555; position: relative; }
+  nav button.active { color: #00795f; border-bottom-color: #00795f; font-weight: 600; }
+  nav button .badge { background: #e74c3c; color: #fff; border-radius: 9px; font-size: 10.5px; padding: 1px 6px; margin-left: 5px; font-weight: 700; }
+  main { flex: 1; overflow: hidden; display: flex; }
+  .pane { display: none; flex: 1; overflow: hidden; }
+  .pane.active { display: flex; }
+
+  /* Inbox */
+  #convo-list { width: 320px; border-right: 1px solid #ddd; background: #fff; overflow-y: auto; display: flex; flex-direction: column; }
+  .convo-list-header { padding: 10px 14px; border-bottom: 1px solid #f0f0f0; }
+  .convo-list-header .btn { width: 100%; }
+  #convo-items { overflow-y: auto; flex: 1; }
+  .convo { padding: 12px 14px; border-bottom: 1px solid #f0f0f0; cursor: pointer; }
+  .convo:hover, .convo.sel { background: #e8f5f0; }
+  .convo .who { font-weight: 600; font-size: 14px; }
+  .convo .preview { font-size: 12.5px; color: #667; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+  .convo .meta { font-size: 11px; color: #99a; margin-top: 2px; }
+  .thread-col { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+  #thread { flex: 1; overflow-y: auto; padding: 20px; background: #efe7dd; display: flex; flex-direction: column; gap: 6px; }
+  .bubble { max-width: 65%; padding: 8px 12px; border-radius: 8px; font-size: 14px; line-height: 1.4; white-space: pre-wrap; box-shadow: 0 1px 1px rgba(0,0,0,0.08); }
+  .bubble.in { align-self: flex-start; background: #fff; }
+  .bubble.out { align-self: flex-end; background: #d9fdd3; }
+  .bubble .tag { display:inline-block; font-size: 10px; font-weight: 700; color: #b9770e; margin-right: 5px; text-transform: uppercase; }
+  .bubble .time { display: block; font-size: 10.5px; color: #889; text-align: right; margin-top: 3px; }
+  .empty { color: #889; font-size: 14px; margin: auto; }
+
+  /* Composer */
+  #composer { background: #fff; border-top: 1px solid #ddd; padding: 10px 14px; }
+  #composer .composer-row { display: flex; gap: 8px; align-items: flex-end; }
+  #composer textarea { flex: 1; min-height: 40px; max-height: 120px; resize: vertical; }
+  #composer-preview { display: none; margin-bottom: 8px; }
+  #composer-preview.show { display: flex; align-items: center; gap: 8px; }
+  #composer-preview img { max-height: 70px; border-radius: 6px; display: block; }
+  #composer .hint-bar { font-size: 12px; color: #889; padding-bottom: 6px; }
+
+  /* Tables & forms */
+  .tablewrap { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 16px; }
+  table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,0.08); }
+  th, td { text-align: left; padding: 10px 14px; font-size: 13.5px; border-bottom: 1px solid #f0f0f0; vertical-align: top; }
+  th { background: #fafafa; color: #556; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+  tr.resolved td { opacity: 0.5; }
+  .pill { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11.5px; font-weight: 600; }
+  .pill.high { background: #fde8e8; color: #c0392b; }
+  .pill.normal { background: #fef5e7; color: #b9770e; }
+  .pill.low { background: #eafaf1; color: #1e8449; }
+  .pill.yes { background: #eafaf1; color: #1e8449; }
+  .pill.no { background: #f4f4f4; color: #888; }
+  .pill.ok { background: #eafaf1; color: #1e8449; }
+  .pill.fail { background: #fde8e8; color: #c0392b; }
+  .chip { display: inline-block; padding: 1px 7px; border-radius: 9px; font-size: 11px; font-weight: 600; background: #e8eef7; color: #34618e; margin: 0 3px 3px 0; }
+  .btn { background: #00795f; color: #fff; border: none; border-radius: 6px; padding: 8px 14px; font-size: 13px; cursor: pointer; }
+  .btn.small { padding: 4px 10px; font-size: 12px; }
+  .btn.ghost { background: #fff; color: #00795f; border: 1px solid #00795f; }
+  .btn.danger { background: #fff; color: #c0392b; border: 1px solid #e8b4b0; }
+  .btn:disabled { opacity: 0.5; cursor: default; }
+  .card { background: #fff; border-radius: 8px; padding: 18px; box-shadow: 0 1px 2px rgba(0,0,0,0.08); }
+  .card h2 { font-size: 15px; margin-bottom: 4px; }
+  .card .hint { font-size: 12.5px; color: #778; margin-bottom: 12px; line-height: 1.5; }
+  .formrow { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
+  .formrow label { font-size: 13px; color: #445; display: flex; align-items: center; gap: 6px; }
+  input[type=text], input[type=email], input[type=number], textarea, select {
+    padding: 8px 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 13.5px; background: #fff;
+  }
+  textarea { width: 100%; min-height: 84px; resize: vertical; }
+  input[type=number] { width: 70px; }
+  .result { font-size: 13px; margin-top: 8px; }
+  .result.ok { color: #1e8449; }
+  .result.err { color: #c0392b; }
+  .note { background: #fef9e7; border: 1px solid #f7dc6f; border-radius: 6px; padding: 10px 12px; font-size: 12.5px; color: #7d6608; line-height: 1.5; }
+  .fu-card { border: 1px solid #e2e6ea; border-radius: 8px; padding: 14px; margin-bottom: 12px; }
+  .fu-card .formrow:first-child { margin-bottom: 8px; }
+  .fu-card input[type=text] { flex: 1; min-width: 160px; }
+  .fu-card .eligible { font-size: 12px; color: #778; }
+
+  /* Login */
+  #login { margin: auto; background: #fff; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); display: flex; flex-direction: column; gap: 12px; width: 320px; }
+  #login input { padding: 10px 12px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; }
+  #login .err { color: #c0392b; font-size: 13px; }
+
+  /* Lead editor modal */
+  #lead-modal, #newchat-modal, #lists-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: none; align-items: center; justify-content: center; z-index: 10; }
+  #lead-modal.open, #newchat-modal.open, #lists-modal.open { display: flex; }
+  #lead-modal .card, #newchat-modal .card, #lists-modal .card { width: 420px; }
+  #lead-modal .formrow, #newchat-modal .formrow, #lists-modal .formrow { flex-direction: column; align-items: stretch; }
+  #lead-modal label, #newchat-modal label, #lists-modal label { flex-direction: column; align-items: stretch; gap: 4px; font-weight: 600; }
+  #lead-modal label input[type=text], #lead-modal label input[type=email],
+  #newchat-modal label input[type=text], #lists-modal label input[type=text] { width: 100%; }
+  #lm-lists-checks { display: flex; flex-wrap: wrap; gap: 10px; }
+  #lm-lists-checks label { flex-direction: row; align-items: center; gap: 5px; font-weight: normal; }
+  #lists-items .formrow { flex-direction: row; align-items: center; justify-content: space-between; }
+  #lists-modal .formrow.addrow { flex-direction: row; gap: 8px; }
+  #lists-modal .formrow.addrow input { flex: 1; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Orvion — WhatsApp Inbox & Leads</h1>
+  <div class="stats" id="stats"></div>
+</header>
+<nav id="nav" hidden>
+  <button data-pane="inbox" class="active">Inbox</button>
+  <button data-pane="leads">Leads</button>
+  <button data-pane="marketing">Marketing</button>
+  <button data-pane="followups">Follow-ups</button>
+  <button data-pane="escalations">Escalations<span class="badge" id="esc-badge" hidden></span></button>
+</nav>
+<main>
+  <div id="login">
+    <b>Admin access</b>
+    <input id="pw" type="password" placeholder="Admin password" autofocus />
+    <button class="btn" id="enter">Open dashboard</button>
+    <div class="err" id="loginerr"></div>
+  </div>
+
+  <div class="pane" id="inbox">
+    <div id="convo-list">
+      <div class="convo-list-header"><button class="btn ghost" id="new-chat-btn">+ New chat</button></div>
+      <div id="convo-items"></div>
+    </div>
+    <div class="thread-col">
+      <div id="thread"><div class="empty">Select a conversation</div></div>
+      <div id="composer">
+        <div class="hint-bar" id="composer-hint">Select a conversation or start a new chat to send a message.</div>
+        <input type="file" id="composer-file" accept="image/*" hidden />
+        <div id="composer-preview"></div>
+        <div class="composer-row">
+          <button class="btn ghost small" id="composer-attach" title="Attach image" disabled>📎</button>
+          <textarea id="composer-text" placeholder="Type a message to send as the Orvion team…" disabled></textarea>
+          <button class="btn" id="composer-send" disabled>Send</button>
+        </div>
+        <div class="result" id="composer-result"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="pane" id="leads">
+    <div class="tablewrap">
+      <div class="formrow" style="justify-content: flex-end">
+        <button class="btn ghost" id="manage-lists">Manage lists</button>
+        <button class="btn" id="add-lead">+ Add lead</button>
+      </div>
+      <table>
+        <thead><tr><th>Name</th><th>WhatsApp</th><th>Email</th><th>Interest</th><th>Lists</th><th>Marketing OK</th><th>Notes</th><th>Updated</th><th></th></tr></thead>
+        <tbody id="leads-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="pane" id="marketing">
+    <div class="tablewrap">
+      <div class="card">
+        <h2>Send a message to your leads</h2>
+        <div class="hint">Goes out on WhatsApp immediately to every lead in the selected audience.</div>
+        <div class="note" style="margin-bottom:12px">WhatsApp rule: free-form messages only deliver to people who messaged you in the <b>last 24 hours</b>. Older contacts need a pre-approved template — failed sends are listed below so you can see who was reached.</div>
+        <textarea id="bc-message" placeholder="Your message… e.g. Our women's hair loss program is now live. Reply here and we'll get you started."></textarea>
+        <div class="formrow" style="margin-top:10px">
+          <label>Audience:
+            <select id="bc-audience">
+              <option value="consented">Leads with marketing consent</option>
+              <option value="all">All leads (use carefully)</option>
+              <optgroup label="Lists" id="bc-audience-lists"></optgroup>
+            </select>
+          </label>
+          <button class="btn" id="bc-send">Send broadcast</button>
+        </div>
+        <div class="result" id="bc-result"></div>
+      </div>
+      <div class="card">
+        <h2>Broadcast history</h2>
+        <table>
+          <thead><tr><th>When</th><th>Audience</th><th>Message</th><th>Sent</th><th>Failed</th></tr></thead>
+          <tbody id="bc-history"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="pane" id="followups">
+    <div class="tablewrap">
+      <div class="card">
+        <h2>Automatic follow-up campaigns</h2>
+        <div class="hint">Each campaign targets a list/category of leads (or everyone who's messaged you) and sends its own message on its own cadence to people who've gone quiet. A reply from a contact pauses their follow-ups for that campaign; the counter restarts when they write again. Checked every 30 minutes.</div>
+        <div id="fu-campaigns"></div>
+        <div class="formrow" style="margin-top:10px">
+          <button class="btn ghost" id="fu-add">+ Add follow-up campaign</button>
+          <button class="btn" id="fu-save">Save all</button>
+        </div>
+        <div class="result" id="fu-result"></div>
+        <div class="note" style="margin-top:12px">Same 24-hour rule applies: follow-ups deliver reliably only with an approved template for older chats. Failed attempts are logged on the server, never spammed twice.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="pane" id="escalations">
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>When</th><th>Customer</th><th>Urgency</th><th>Respond by</th><th>Reason</th><th>Status</th><th></th></tr></thead>
+        <tbody id="esc-body"></tbody>
+      </table>
+    </div>
+  </div>
+</main>
+
+<div id="lead-modal">
+  <div class="card">
+    <h2 id="lm-title">Add lead</h2>
+    <div class="formrow" style="margin-top:12px">
+      <label>WhatsApp number <input type="text" id="lm-phone" placeholder="9715xxxxxxxx (digits only)" /></label>
+      <label>Name <input type="text" id="lm-name" /></label>
+      <label>Email <input type="email" id="lm-email" /></label>
+      <label>Treatment interest <input type="text" id="lm-interest" placeholder="weight loss / hair loss / mens health / peptides" /></label>
+      <label>Lists / categories <div id="lm-lists-checks"></div></label>
+      <label style="flex-direction:row; align-items:center"><input type="checkbox" id="lm-consent" /> Marketing consent given</label>
+      <label>Notes <input type="text" id="lm-notes" /></label>
+    </div>
+    <div class="formrow" style="justify-content: flex-end">
+      <button class="btn ghost" id="lm-cancel">Cancel</button>
+      <button class="btn" id="lm-save">Save lead</button>
+    </div>
+    <div class="result err" id="lm-err"></div>
+  </div>
+</div>
+
+<div id="newchat-modal">
+  <div class="card">
+    <h2>New conversation</h2>
+    <div class="formrow" style="margin-top:12px">
+      <label>WhatsApp number <input type="text" id="nc-phone" placeholder="9715xxxxxxxx (digits only)" /></label>
+    </div>
+    <div class="formrow" style="flex-direction:row; justify-content: flex-end">
+      <button class="btn ghost" id="nc-cancel">Cancel</button>
+      <button class="btn" id="nc-start">Start</button>
+    </div>
+    <div class="result err" id="nc-err"></div>
+  </div>
+</div>
+
+<div id="lists-modal">
+  <div class="card">
+    <h2>Lead lists / categories</h2>
+    <div class="hint">Define your categories once here, then assign them to leads via checkboxes in the lead editor.</div>
+    <div id="lists-items"></div>
+    <div class="formrow addrow" style="margin-top:10px">
+      <input type="text" id="lists-new" placeholder="New list name, e.g. VIP" />
+      <button class="btn ghost" id="lists-add">Add</button>
+    </div>
+    <div class="formrow" style="flex-direction:row; justify-content: flex-end; margin-top:12px">
+      <button class="btn ghost" id="lists-cancel">Close</button>
+      <button class="btn" id="lists-save">Save</button>
+    </div>
+    <div class="result" id="lists-result"></div>
+  </div>
+</div>
+
+<script>
+  let KEY = sessionStorage.getItem("adminkey") || "";
+  let selectedUser = null;
+  let leadsCache = [];
+  let listsCache = [];
+  let campaignsCache = [];
+  let leadListsCatalog = [];
+  let pendingImage = null;
+
+  const RESPOND_BY = {
+    high: "ASAP — within minutes",
+    normal: "Today — within a few hours",
+    low: "Within 1-2 business days",
+  };
+
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => (s ?? "").toString().replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const fmtTime = (t) => t ? new Date(t.replace(" ", "T") + "Z").toLocaleString([], { dateStyle: "short", timeStyle: "short" }) : "";
+
+  async function api(path, opts = {}) {
+    const res = await fetch(path, {
+      ...opts,
+      headers: { "Content-Type": "application/json", "x-admin-password": KEY, ...(opts.headers || {}) },
+    });
+    if (res.status === 401) throw new Error("auth");
+    return res.json();
+  }
+
+  function switchTo(pane) {
+    document.querySelectorAll("nav button").forEach((x) => x.classList.toggle("active", x.dataset.pane === pane));
+    document.querySelectorAll(".pane").forEach((x) => x.classList.toggle("active", x.id === pane));
+  }
+
+  async function refresh() {
+    const data = await api("/api/admin/overview");
+    const s = data.stats;
+    leadsCache = data.leads;
+    $("stats").innerHTML =
+      "<span><b>" + s.conversations + "</b> chats</span><span><b>" + s.messages + "</b> messages</span>" +
+      "<span><b>" + s.leads + "</b> leads</span><span><b>" + s.emails + "</b> emails</span>" +
+      "<span><b>" + s.open_escalations + "</b> open escalations</span>";
+    $("esc-badge").hidden = !s.open_escalations;
+    $("esc-badge").textContent = s.open_escalations;
+
+    // Inbox
+    $("convo-items").innerHTML = data.conversations.map((c) =>
+      '<div class="convo' + (c.user === selectedUser ? " sel" : "") + '" data-user="' + esc(c.user) + '">' +
+      '<div class="who">' + esc(c.lead_name || c.user) + "</div>" +
+      '<div class="preview">' + esc(c.last_body) + "</div>" +
+      '<div class="meta">' + esc(c.lead_name ? c.user + " · " : "") + c.message_count + " msgs · " + fmtTime(c.last_at) + "</div></div>",
+    ).join("") || '<div class="convo">No conversations yet</div>';
+    document.querySelectorAll(".convo[data-user]").forEach((el) =>
+      el.addEventListener("click", () => { selectedUser = el.dataset.user; loadThread(); refresh(); }),
+    );
+
+    // Leads
+    $("leads-body").innerHTML = data.leads.map((l, i) =>
+      "<tr><td>" + esc(l.name || "—") + "</td><td>" + esc(l.phone) + "</td><td>" + esc(l.email || "—") + "</td>" +
+      "<td>" + esc(l.interest || "—") + "</td>" +
+      "<td>" + ((l.lists || []).map((x) => '<span class="chip">' + esc(x) + "</span>").join("") || "—") + "</td>" +
+      '<td><span class="pill ' + (l.marketing_consent ? "yes" : "no") + '">' + (l.marketing_consent ? "Yes" : "No") + "</span></td>" +
+      "<td>" + esc(l.notes || "") + "</td><td>" + fmtTime(l.updated_at) + "</td>" +
+      '<td style="white-space:nowrap"><button class="btn small ghost" data-edit="' + i + '">Edit</button> ' +
+      '<button class="btn small danger" data-del="' + esc(l.phone) + '">Delete</button></td></tr>',
+    ).join("") || '<tr><td colspan="9">No leads yet</td></tr>';
+    document.querySelectorAll("[data-edit]").forEach((b) =>
+      b.addEventListener("click", () => openLeadModal(leadsCache[Number(b.dataset.edit)])),
+    );
+    document.querySelectorAll("[data-del]").forEach((b) =>
+      b.addEventListener("click", async () => {
+        if (!confirm("Delete lead " + b.dataset.del + "? This cannot be undone.")) return;
+        await api("/api/admin/leads/" + encodeURIComponent(b.dataset.del), { method: "DELETE" });
+        refresh();
+      }),
+    );
+
+    // Escalations
+    $("esc-body").innerHTML = data.escalations.map((e) =>
+      '<tr class="' + (e.resolved ? "resolved" : "") + '"><td>' + fmtTime(e.created_at) + "</td>" +
+      '<td><a href="#" data-chat="' + esc(e.user) + '">' + esc(e.user) + "</a></td>" +
+      '<td><span class="pill ' + esc(e.urgency) + '">' + esc(e.urgency) + "</span></td>" +
+      "<td>" + esc(RESPOND_BY[e.urgency] || "") + "</td>" +
+      "<td>" + esc(e.reason) + "</td>" +
+      '<td><span class="pill ' + (e.resolved ? "yes" : "no") + '">' + (e.resolved ? "Resolved" : "Open") + "</span></td>" +
+      '<td><button class="btn small ' + (e.resolved ? "ghost" : "") + '" data-resolve="' + e.id + '" data-to="' + (e.resolved ? 0 : 1) + '">' +
+      (e.resolved ? "Reopen" : "Mark resolved") + "</button></td></tr>",
+    ).join("") || '<tr><td colspan="7">No escalations yet</td></tr>';
+    document.querySelectorAll("[data-resolve]").forEach((b) =>
+      b.addEventListener("click", async () => {
+        await api("/api/admin/escalations/" + b.dataset.resolve, {
+          method: "POST",
+          body: JSON.stringify({ resolved: b.dataset.to === "1" }),
+        });
+        refresh();
+      }),
+    );
+    document.querySelectorAll("[data-chat]").forEach((a) =>
+      a.addEventListener("click", (ev) => {
+        ev.preventDefault();
+        selectedUser = a.dataset.chat;
+        switchTo("inbox");
+        loadThread();
+        refresh();
+      }),
+    );
+  }
+
+  async function loadThread() {
+    if (!selectedUser) return;
+    const data = await api("/api/admin/messages?user=" + encodeURIComponent(selectedUser));
+    $("thread").innerHTML = data.messages.map((m) =>
+      '<div class="bubble ' + m.direction + '">' +
+      (m.kind === "image" ? "📷 " : "") +
+      (m.kind === "broadcast" ? '<span class="tag">broadcast</span>' : "") +
+      (m.kind.startsWith("followup") ? '<span class="tag">follow-up</span>' : "") +
+      ((m.direction === "out" && (m.kind === "manual" || m.kind === "image")) ? '<span class="tag">team</span>' : "") +
+      esc(m.body) + '<span class="time">' + fmtTime(m.created_at) + "</span></div>",
+    ).join("") || '<div class="empty">No messages</div>';
+    $("thread").scrollTop = $("thread").scrollHeight;
+    updateComposerState();
+  }
+
+  // --- Composer (manual team replies / new chats) ---
+  function updateComposerState() {
+    const enabled = !!selectedUser;
+    $("composer-attach").disabled = !enabled;
+    $("composer-text").disabled = !enabled;
+    $("composer-send").disabled = !enabled;
+    $("composer-hint").textContent = enabled
+      ? "Sending as the Orvion team to " + selectedUser
+      : "Select a conversation or start a new chat to send a message.";
+  }
+
+  function clearComposerImage() {
+    pendingImage = null;
+    $("composer-file").value = "";
+    $("composer-preview").innerHTML = "";
+    $("composer-preview").classList.remove("show");
+  }
+
+  $("composer-attach").addEventListener("click", () => $("composer-file").click());
+  $("composer-file").addEventListener("change", () => {
+    const file = $("composer-file").files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const match = reader.result.match(/^data:(.+?);base64,(.+)$/);
+      if (!match) return;
+      pendingImage = { mimeType: match[1], data: match[2] };
+      $("composer-preview").innerHTML =
+        '<img src="' + reader.result + '" /><button class="btn small ghost" id="composer-clear-img">Remove image</button>';
+      $("composer-preview").classList.add("show");
+      $("composer-clear-img").addEventListener("click", clearComposerImage);
+    };
+    reader.readAsDataURL(file);
+  });
+
+  $("composer-send").addEventListener("click", async () => {
+    if (!selectedUser) return;
+    const message = $("composer-text").value.trim();
+    if (!message && !pendingImage) return;
+    $("composer-send").disabled = true;
+    $("composer-result").className = "result";
+    $("composer-result").textContent = "Sending…";
+    try {
+      const r = await api("/api/admin/send", {
+        method: "POST",
+        body: JSON.stringify({ to: selectedUser, message, image: pendingImage }),
+      });
+      if (r.error) {
+        $("composer-result").className = "result err";
+        $("composer-result").textContent = r.error;
+      } else {
+        $("composer-text").value = "";
+        clearComposerImage();
+        $("composer-result").textContent = "";
+        await loadThread();
+        refresh();
+      }
+    } finally {
+      $("composer-send").disabled = !selectedUser;
+    }
+  });
+
+  // --- New chat ---
+  $("new-chat-btn").addEventListener("click", () => {
+    $("nc-phone").value = "";
+    $("nc-err").textContent = "";
+    $("newchat-modal").classList.add("open");
+  });
+  $("nc-cancel").addEventListener("click", () => $("newchat-modal").classList.remove("open"));
+  $("nc-start").addEventListener("click", () => {
+    const phone = $("nc-phone").value.replace(/\D/g, "");
+    if (!phone) { $("nc-err").textContent = "Enter a WhatsApp number (digits only)"; return; }
+    selectedUser = phone;
+    $("newchat-modal").classList.remove("open");
+    switchTo("inbox");
+    loadThread();
+    refresh();
+  });
+  $("nc-phone").addEventListener("keydown", (e) => { if (e.key === "Enter") $("nc-start").click(); });
+
+  // --- Lead modal ---
+  function openLeadModal(lead) {
+    $("lm-title").textContent = lead ? "Edit lead" : "Add lead";
+    $("lm-phone").value = lead?.phone || "";
+    $("lm-phone").disabled = !!lead;
+    $("lm-name").value = lead?.name || "";
+    $("lm-email").value = lead?.email || "";
+    $("lm-interest").value = lead?.interest || "";
+    const union = [...new Set([...leadListsCatalog, ...(lead?.lists || [])])];
+    $("lm-lists-checks").innerHTML = union.length
+      ? union.map((l) =>
+          '<label><input type="checkbox" class="lm-list-cb" value="' + esc(l) + '" ' +
+          ((lead?.lists || []).includes(l) ? "checked" : "") + ' />' + esc(l) + "</label>",
+        ).join("")
+      : '<span class="hint" style="margin:0">No lists yet — add some via "Manage lists".</span>';
+    $("lm-consent").checked = !!lead?.marketing_consent;
+    $("lm-notes").value = lead?.notes || "";
+    $("lm-err").textContent = "";
+    $("lead-modal").classList.add("open");
+  }
+  $("add-lead").addEventListener("click", () => openLeadModal(null));
+  $("lm-cancel").addEventListener("click", () => $("lead-modal").classList.remove("open"));
+  $("lm-save").addEventListener("click", async () => {
+    const phone = $("lm-phone").value.trim();
+    if (!phone) { $("lm-err").textContent = "Phone is required"; return; }
+    await api("/api/admin/leads", {
+      method: "POST",
+      body: JSON.stringify({
+        phone,
+        name: $("lm-name").value.trim(),
+        email: $("lm-email").value.trim(),
+        interest: $("lm-interest").value.trim(),
+        lists: Array.from(document.querySelectorAll(".lm-list-cb:checked")).map((c) => c.value),
+        marketing_consent: $("lm-consent").checked,
+        notes: $("lm-notes").value.trim(),
+      }),
+    });
+    $("lead-modal").classList.remove("open");
+    loadLists();
+    refresh();
+  });
+
+  // --- Lead lists catalog ---
+  async function loadLeadListsCatalog() {
+    const data = await api("/api/admin/lead-lists");
+    leadListsCatalog = data.lists;
+  }
+  function renderListsModal() {
+    $("lists-items").innerHTML = leadListsCatalog.map((l, i) =>
+      '<div class="formrow"><span>' + esc(l) + '</span><button class="btn small danger" data-rm-list="' + i + '">Remove</button></div>',
+    ).join("") || '<div class="hint" style="margin:0">No lists yet — add one below.</div>';
+    document.querySelectorAll("[data-rm-list]").forEach((b) =>
+      b.addEventListener("click", () => {
+        leadListsCatalog.splice(Number(b.dataset.rmList), 1);
+        renderListsModal();
+      }),
+    );
+  }
+  $("manage-lists").addEventListener("click", () => {
+    $("lists-result").textContent = "";
+    renderListsModal();
+    $("lists-modal").classList.add("open");
+  });
+  $("lists-cancel").addEventListener("click", () => $("lists-modal").classList.remove("open"));
+  $("lists-add").addEventListener("click", () => {
+    const v = $("lists-new").value.trim();
+    if (v && !leadListsCatalog.includes(v)) {
+      leadListsCatalog.push(v);
+      renderListsModal();
+    }
+    $("lists-new").value = "";
+  });
+  $("lists-new").addEventListener("keydown", (e) => { if (e.key === "Enter") $("lists-add").click(); });
+  $("lists-save").addEventListener("click", async () => {
+    const r = await api("/api/admin/lead-lists", { method: "POST", body: JSON.stringify({ lists: leadListsCatalog }) });
+    leadListsCatalog = r.lists;
+    $("lists-result").className = "result ok";
+    $("lists-result").textContent = "Saved.";
+    renderListsModal();
+  });
+
+  // --- Marketing ---
+  async function loadBroadcasts() {
+    const data = await api("/api/admin/broadcasts");
+    $("bc-history").innerHTML = data.broadcasts.map((b) =>
+      "<tr><td>" + fmtTime(b.created_at) + "</td><td>" + esc(b.audience) + "</td>" +
+      "<td>" + esc(b.message.slice(0, 120)) + "</td>" +
+      '<td><span class="pill ok">' + b.sent + "</span></td>" +
+      '<td><span class="pill ' + (b.failed ? "fail" : "no") + '">' + b.failed + "</span></td></tr>",
+    ).join("") || '<tr><td colspan="5">No broadcasts yet</td></tr>';
+  }
+  $("bc-send").addEventListener("click", async () => {
+    const message = $("bc-message").value.trim();
+    const audience = $("bc-audience").value;
+    if (!message) return;
+    const count = leadsCache.filter((l) => /^\d+$/.test(l.phone) && (audience === "all" || l.marketing_consent)).length;
+    if (!confirm("Send this message to " + count + " lead(s) on WhatsApp now?")) return;
+    $("bc-send").disabled = true;
+    $("bc-result").textContent = "Sending…";
+    try {
+      const r = await api("/api/admin/broadcast", { method: "POST", body: JSON.stringify({ message, audience }) });
+      if (r.error) {
+        $("bc-result").className = "result err"; $("bc-result").textContent = r.error;
+      } else {
+        $("bc-result").className = "result ok";
+        $("bc-result").textContent = "Sent to " + r.sent + " · failed " + r.failed +
+          (r.failed ? " (failures usually mean outside the 24h window)" : "");
+        $("bc-message").value = "";
+        loadBroadcasts();
+      }
+    } finally { $("bc-send").disabled = false; }
+  });
+
+  // --- Follow-up campaigns ---
+  async function loadLists() {
+    const data = await api("/api/admin/lists");
+    listsCache = data.lists;
+    $("bc-audience-lists").innerHTML = listsCache.map((l) =>
+      '<option value="list:' + esc(l) + '">List: ' + esc(l) + "</option>",
+    ).join("");
+  }
+
+  function renderCampaigns() {
+    $("fu-campaigns").innerHTML = campaignsCache.map((c, i) =>
+      '<div class="fu-card" data-i="' + i + '">' +
+      '<div class="formrow">' +
+        '<label style="flex-direction:row;gap:6px">Name <input type="text" class="fu-name" value="' + esc(c.name) + '" placeholder="e.g. Hair Loss Women Launch" /></label>' +
+        '<label style="flex-direction:row;gap:6px">Target list ' +
+          '<select class="fu-list">' +
+            '<option value="">Everyone who has messaged us</option>' +
+            listsCache.map((l) => '<option value="' + esc(l) + '"' + (c.list === l ? " selected" : "") + ">" + esc(l) + "</option>").join("") +
+          "</select></label>" +
+        '<button class="btn small danger fu-remove" style="margin-left:auto">Remove</button>' +
+      "</div>" +
+      '<textarea class="fu-message" placeholder="Follow-up message…">' + esc(c.message) + "</textarea>" +
+      '<div class="formrow" style="margin-top:10px">' +
+        '<label><input type="checkbox" class="fu-enabled" ' + (c.enabled ? "checked" : "") + " /> Enabled</label>" +
+        '<label>Per week: <input type="number" class="fu-perweek" min="1" max="7" value="' + (c.per_week ?? 2) + '" /></label>' +
+        '<label>Stop after <input type="number" class="fu-max" min="1" max="10" value="' + (c.max_per_lead ?? 3) + '" /> without a reply</label>' +
+        '<span class="eligible">' + (c.eligible_now ?? 0) + " eligible now</span>" +
+      "</div></div>",
+    ).join("") || '<div class="hint">No follow-up campaigns yet — add one below.</div>';
+
+    // Fix select value (set via attribute didn't work for the "" default option group ordering)
+    document.querySelectorAll(".fu-card").forEach((card, i) => {
+      card.querySelector(".fu-list").value = campaignsCache[i].list || "";
+      card.querySelector(".fu-remove").addEventListener("click", () => {
+        campaignsCache.splice(i, 1);
+        renderCampaigns();
+      });
+    });
+  }
+
+  async function loadFollowups() {
+    const data = await api("/api/admin/followups");
+    campaignsCache = data.campaigns;
+    if (data.lists.length) listsCache = data.lists;
+    renderCampaigns();
+  }
+
+  $("fu-add").addEventListener("click", () => {
+    campaignsCache.push({ id: null, name: "New campaign", list: "", message: "", enabled: false, per_week: 2, max_per_lead: 3, eligible_now: 0 });
+    renderCampaigns();
+  });
+
+  $("fu-save").addEventListener("click", async () => {
+    const campaigns = Array.from(document.querySelectorAll(".fu-card")).map((card, i) => ({
+      id: campaignsCache[i].id,
+      name: card.querySelector(".fu-name").value.trim() || "Follow-up",
+      list: card.querySelector(".fu-list").value,
+      message: card.querySelector(".fu-message").value.trim(),
+      enabled: card.querySelector(".fu-enabled").checked,
+      per_week: card.querySelector(".fu-perweek").value,
+      max_per_lead: card.querySelector(".fu-max").value,
+    }));
+    const r = await api("/api/admin/followups", { method: "POST", body: JSON.stringify({ campaigns }) });
+    campaignsCache = r.campaigns;
+    renderCampaigns();
+    $("fu-result").className = "result ok";
+    $("fu-result").textContent = "Saved " + campaigns.length + " campaign(s).";
+  });
+
+  async function start() {
+    try { await refresh(); } catch (e) {
+      $("loginerr").textContent = "Wrong password";
+      sessionStorage.removeItem("adminkey");
+      return;
+    }
+    $("login").style.display = "none";
+    $("nav").hidden = false;
+    switchTo("inbox");
+    updateComposerState();
+    await loadLists();
+    await loadLeadListsCatalog();
+    loadBroadcasts();
+    loadFollowups();
+    setInterval(() => { refresh(); if (selectedUser) loadThread(); }, 5000);
+  }
+
+  $("enter").addEventListener("click", () => {
+    KEY = $("pw").value;
+    sessionStorage.setItem("adminkey", KEY);
+    start();
+  });
+  $("pw").addEventListener("keydown", (e) => { if (e.key === "Enter") $("enter").click(); });
+  document.querySelectorAll("nav button").forEach((b) =>
+    b.addEventListener("click", () => switchTo(b.dataset.pane)),
+  );
+
+  if (KEY) start();
+</script>
+</body>
+</html>

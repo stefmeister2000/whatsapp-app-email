@@ -1,0 +1,21 @@
+{
+  "name": "orvion-whatsapp-agent",
+  "version": "1.0.0",
+  "description": "AI agent for WhatsApp Business answering questions about orvionresearch.com, powered by Claude",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "chat": "node src/chat-cli.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "better-sqlite3": "^12.10.0",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
