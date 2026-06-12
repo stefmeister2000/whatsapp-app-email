@@ -13,6 +13,7 @@ import {
   listEscalations,
   stats,
   overwriteLead,
+  upsertLead,
   deleteLead,
   setEscalationResolved,
   logBroadcast,
@@ -367,6 +368,7 @@ async function handleMessage(message) {
 
   console.log(`[in] ${from}: ${logLabel}`);
   logMessage(from, "in", logLabel, message.type === "image" ? "image" : "text");
+  upsertLead({ phone: from }); // ensure every WhatsApp contact appears in Leads, even before save_lead
   await markReadWithTyping(message.id);
 
   try {
