@@ -3,7 +3,7 @@ import express from "express";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { generateReply, resetConversation } from "./agent.js";
-import { sendText, sendImage, uploadMedia, markReadWithTyping, downloadMedia } from "./whatsapp.js";
+import { sendText, sendTemplate, sendImage, uploadMedia, markReadWithTyping, downloadMedia } from "./whatsapp.js";
 import {
   logMessage,
   listConversations,
@@ -20,6 +20,9 @@ import {
   listBroadcasts,
   getSetting,
   setSetting,
+  listKnowledgePages,
+  upsertKnowledgePage,
+  deleteKnowledgePage,
 } from "./db.js";
 import {
   getCampaigns,
@@ -27,6 +30,7 @@ import {
   eligibleForCampaign,
   startFollowupScheduler,
 } from "./followups.js";
+import { scanPage } from "./scanner.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -207,15 +211,29 @@ app.post("/api/admin/escalations/:id", requireAdmin, (req, res) => {
 });
 
 // Marketing broadcast — sends to leads now; reports per-recipient results.
+// mode "text": free-form message, only delivers to contacts who messaged within 24h.
+// mode "template": pre-approved WhatsApp template, delivers regardless of the 24h window.
 app.post("/api/admin/broadcast", requireAdmin, async (req, res) => {
-  const message = (req.body?.message || "").trim();
+  const mode = req.body?.mode === "template" ? "template" : "text";
   const audience = req.body?.audience || "consented";
-  if (!message) return res.status(400).json({ error: "Empty message" });
   if (!process.env.WHATSAPP_ACCESS_TOKEN) {
     return res.status(503).json({
       error: "WhatsApp is not connected yet (WHATSAPP_ACCESS_TOKEN missing).",
     });
   }
+
+  let message, templateName, templateLanguage, templateParams;
+  if (mode === "template") {
+    templateName = (req.body?.template_name || "").trim();
+    templateLanguage = (req.body?.template_language || "en").trim();
+    templateParams = Array.isArray(req.body?.template_params) ? req.body.template_params : [];
+    if (!templateName) return res.status(400).json({ error: "Template name required" });
+    message = `[template: ${templateName}]` + (templateParams.length ? ` ${templateParams.join(" | ")}` : "");
+  } else {
+    message = (req.body?.message || "").trim();
+    if (!message) return res.status(400).json({ error: "Empty message" });
+  }
+
   const listName = audience.startsWith("list:") ? audience.slice(5) : null;
   const targets = listLeads().filter((l) => {
     if (!/^\d+$/.test(l.phone)) return false;
@@ -226,7 +244,11 @@ app.post("/api/admin/broadcast", requireAdmin, async (req, res) => {
   const results = [];
   for (const lead of targets) {
     try {
-      await sendText(lead.phone, message);
+      if (mode === "template") {
+        await sendTemplate(lead.phone, templateName, templateLanguage, templateParams);
+      } else {
+        await sendText(lead.phone, message);
+      }
       logMessage(lead.phone, "out", message, "broadcast");
       results.push({ phone: lead.phone, name: lead.name, ok: true });
     } catch (err) {
@@ -267,6 +289,28 @@ app.post("/api/admin/followups", requireAdmin, (req, res) => {
     campaigns: campaigns.map((c) => ({ ...c, eligible_now: eligibleForCampaign(c).length })),
     lists: allLists(),
   });
+});
+
+// Knowledge base — extra pages scanned from orvionresearch.com.
+app.get("/api/admin/knowledge", requireAdmin, (_req, res) => {
+  res.json({ pages: listKnowledgePages() });
+});
+app.post("/api/admin/knowledge", requireAdmin, async (req, res) => {
+  const url = (req.body?.url || "").trim();
+  if (!/^https?:\/\//i.test(url)) {
+    return res.status(400).json({ error: "Enter a valid http(s) URL" });
+  }
+  try {
+    const { title, content } = await scanPage(url);
+    upsertKnowledgePage(url, title, content);
+    res.json({ pages: listKnowledgePages() });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+app.delete("/api/admin/knowledge/:id", requireAdmin, (req, res) => {
+  deleteKnowledgePage(Number(req.params.id));
+  res.json({ pages: listKnowledgePages() });
 });
 
 // Webhook verification handshake (Meta App Dashboard → Webhooks → Verify)

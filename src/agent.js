@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { KNOWLEDGE_BASE } from "./knowledge.js";
-import { upsertLead, logEscalation } from "./db.js";
+import { upsertLead, logEscalation, listKnowledgePages } from "./db.js";
 
 const client = new Anthropic(); // reads ANTHROPIC_API_KEY from env
 
@@ -232,15 +232,25 @@ export async function generateReply(userId, userContent) {
   history.push({ role: "user", content: userContent });
   trimHistory(history);
 
-  const system = isFirstMessage
-    ? [
-        ...SYSTEM_PROMPT,
-        {
-          type: "text",
-          text: "This is the customer's first-ever message in this conversation — follow the 'First message from a new contact' instructions for your reply.",
-        },
-      ]
-    : SYSTEM_PROMPT;
+  const system = [...SYSTEM_PROMPT];
+
+  const extraPages = listKnowledgePages();
+  if (extraPages.length) {
+    system.push({
+      type: "text",
+      text:
+        "# ADDITIONAL PAGES SCANNED FROM ORVIONRESEARCH.COM\n\n" +
+        extraPages.map((p) => `## ${p.title} (${p.url})\n${p.content}`).join("\n\n"),
+      cache_control: { type: "ephemeral" },
+    });
+  }
+
+  if (isFirstMessage) {
+    system.push({
+      type: "text",
+      text: "This is the customer's first-ever message in this conversation — follow the 'First message from a new contact' instructions for your reply.",
+    });
+  }
 
   let response;
   const replyParts = []; // text from every iteration — the message sent with a tool call matters too

@@ -119,6 +119,7 @@
   <button data-pane="leads">Leads</button>
   <button data-pane="marketing">Marketing</button>
   <button data-pane="followups">Follow-ups</button>
+  <button data-pane="knowledge">Knowledge</button>
   <button data-pane="escalations">Escalations<span class="badge" id="esc-badge" hidden></span></button>
 </nav>
 <main>
@@ -168,8 +169,20 @@
       <div class="card">
         <h2>Send a message to your leads</h2>
         <div class="hint">Goes out on WhatsApp immediately to every lead in the selected audience.</div>
-        <div class="note" style="margin-bottom:12px">WhatsApp rule: free-form messages only deliver to people who messaged you in the <b>last 24 hours</b>. Older contacts need a pre-approved template — failed sends are listed below so you can see who was reached.</div>
+        <div class="formrow" style="margin-bottom:6px">
+          <label style="flex-direction:row;gap:6px"><input type="radio" name="bc-mode" id="bc-mode-text" value="text" checked /> Free-form message</label>
+          <label style="flex-direction:row;gap:6px"><input type="radio" name="bc-mode" id="bc-mode-template" value="template" /> Approved template (for everyone)</label>
+        </div>
+        <div class="note" id="bc-mode-hint" style="margin-bottom:12px">Free-form messages only deliver to people who messaged you in the <b>last 24 hours</b> — older contacts will show as failed below.</div>
         <textarea id="bc-message" placeholder="Your message… e.g. Our women's hair loss program is now live. Reply here and we'll get you started."></textarea>
+        <div id="bc-template-fields" hidden>
+          <div class="formrow">
+            <label>Template name <input type="text" id="bc-template-name" placeholder="e.g. biweekly_update" /></label>
+            <label>Language code <input type="text" id="bc-template-lang" placeholder="en" value="en" /></label>
+            <label>Body variables (comma-separated, optional) <input type="text" id="bc-template-params" placeholder="e.g. Maryam, Hair Loss" /></label>
+          </div>
+          <div class="hint">Create and get the template approved first in Meta's WhatsApp Manager → Message Templates. The name/variables here must match exactly.</div>
+        </div>
         <div class="formrow" style="margin-top:10px">
           <label>Audience:
             <select id="bc-audience">
@@ -204,6 +217,24 @@
         </div>
         <div class="result" id="fu-result"></div>
         <div class="note" style="margin-top:12px">Same 24-hour rule applies: follow-ups deliver reliably only with an approved template for older chats. Failed attempts are logged on the server, never spammed twice.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="pane" id="knowledge">
+    <div class="tablewrap">
+      <div class="card">
+        <h2>Knowledge base — extra pages</h2>
+        <div class="hint">Add pages from orvionresearch.com (or anywhere else) for the AI to read alongside its built-in knowledge base. Re-scan a page after you update it on the website.</div>
+        <div class="formrow" style="margin-top:10px">
+          <input type="text" id="kb-url" placeholder="https://orvionresearch.com/some-page" style="flex:1" />
+          <button class="btn" id="kb-add">+ Scan page</button>
+        </div>
+        <div class="result" id="kb-result"></div>
+        <table style="margin-top:12px">
+          <thead><tr><th>Page</th><th>URL</th><th>Last scanned</th><th>Content length</th><th></th></tr></thead>
+          <tbody id="kb-body"></tbody>
+        </table>
       </div>
     </div>
   </div>
@@ -574,23 +605,47 @@
       '<td><span class="pill ' + (b.failed ? "fail" : "no") + '">' + b.failed + "</span></td></tr>",
     ).join("") || '<tr><td colspan="5">No broadcasts yet</td></tr>';
   }
+  function updateBroadcastMode() {
+    const isTemplate = $("bc-mode-template").checked;
+    $("bc-template-fields").hidden = !isTemplate;
+    $("bc-message").hidden = isTemplate;
+    $("bc-mode-hint").innerHTML = isTemplate
+      ? "Template messages deliver regardless of the 24h window, but must already be <b>approved</b> in Meta's WhatsApp Manager."
+      : "Free-form messages only deliver to people who messaged you in the <b>last 24 hours</b> — older contacts will show as failed below.";
+  }
+  $("bc-mode-text").addEventListener("change", updateBroadcastMode);
+  $("bc-mode-template").addEventListener("change", updateBroadcastMode);
+
   $("bc-send").addEventListener("click", async () => {
-    const message = $("bc-message").value.trim();
+    const mode = $("bc-mode-template").checked ? "template" : "text";
     const audience = $("bc-audience").value;
-    if (!message) return;
     const count = leadsCache.filter((l) => /^\d+$/.test(l.phone) && (audience === "all" || l.marketing_consent)).length;
-    if (!confirm("Send this message to " + count + " lead(s) on WhatsApp now?")) return;
+
+    let body = { mode, audience };
+    if (mode === "template") {
+      const template_name = $("bc-template-name").value.trim();
+      if (!template_name) { $("bc-result").className = "result err"; $("bc-result").textContent = "Enter the approved template name."; return; }
+      body.template_name = template_name;
+      body.template_language = $("bc-template-lang").value.trim() || "en";
+      body.template_params = $("bc-template-params").value.split(",").map((s) => s.trim()).filter(Boolean);
+    } else {
+      const message = $("bc-message").value.trim();
+      if (!message) return;
+      body.message = message;
+    }
+
+    if (!confirm("Send this " + (mode === "template" ? "template" : "message") + " to " + count + " lead(s) on WhatsApp now?")) return;
     $("bc-send").disabled = true;
     $("bc-result").textContent = "Sending…";
     try {
-      const r = await api("/api/admin/broadcast", { method: "POST", body: JSON.stringify({ message, audience }) });
+      const r = await api("/api/admin/broadcast", { method: "POST", body: JSON.stringify(body) });
       if (r.error) {
         $("bc-result").className = "result err"; $("bc-result").textContent = r.error;
       } else {
         $("bc-result").className = "result ok";
         $("bc-result").textContent = "Sent to " + r.sent + " · failed " + r.failed +
-          (r.failed ? " (failures usually mean outside the 24h window)" : "");
-        $("bc-message").value = "";
+          (r.failed && mode === "text" ? " (failures usually mean outside the 24h window)" : "");
+        if (mode === "text") $("bc-message").value = "";
         loadBroadcasts();
       }
     } finally { $("bc-send").disabled = false; }
@@ -665,6 +720,45 @@
     $("fu-result").textContent = "Saved " + campaigns.length + " campaign(s).";
   });
 
+  // --- Knowledge base pages ---
+  function renderKnowledgePages(pages) {
+    $("kb-body").innerHTML = pages.map((p) =>
+      "<tr><td>" + esc(p.title) + "</td>" +
+      '<td><a href="' + esc(p.url) + '" target="_blank" rel="noopener">' + esc(p.url) + "</a></td>" +
+      "<td>" + fmtTime(p.scraped_at) + "</td>" +
+      "<td>" + p.content.length.toLocaleString() + " chars</td>" +
+      '<td><button class="btn small danger" data-kb-del="' + p.id + '">Remove</button></td></tr>',
+    ).join("") || '<tr><td colspan="5">No extra pages yet — add one above.</td></tr>';
+    document.querySelectorAll("[data-kb-del]").forEach((b) =>
+      b.addEventListener("click", async () => {
+        const r = await api("/api/admin/knowledge/" + b.dataset.kbDel, { method: "DELETE" });
+        renderKnowledgePages(r.pages);
+      }),
+    );
+  }
+
+  async function loadKnowledge() {
+    const data = await api("/api/admin/knowledge");
+    renderKnowledgePages(data.pages);
+  }
+
+  $("kb-add").addEventListener("click", async () => {
+    const url = $("kb-url").value.trim();
+    if (!url) return;
+    $("kb-result").className = "result";
+    $("kb-result").textContent = "Scanning…";
+    const r = await api("/api/admin/knowledge", { method: "POST", body: JSON.stringify({ url }) });
+    if (r.error) {
+      $("kb-result").className = "result err";
+      $("kb-result").textContent = r.error;
+      return;
+    }
+    $("kb-url").value = "";
+    $("kb-result").className = "result ok";
+    $("kb-result").textContent = "Scanned and added.";
+    renderKnowledgePages(r.pages);
+  });
+
   async function start() {
     try { await refresh(); } catch (e) {
       $("loginerr").textContent = "Wrong password";
@@ -679,6 +773,7 @@
     await loadLeadListsCatalog();
     loadBroadcasts();
     loadFollowups();
+    loadKnowledge();
     setInterval(() => { refresh(); if (selectedUser) loadThread(); }, 5000);
   }
 

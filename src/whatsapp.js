@@ -51,6 +51,28 @@ export async function sendText(to, text) {
   }
 }
 
+/**
+ * Send a pre-approved WhatsApp message template (required for marketing
+ * messages to contacts outside the 24h customer-service window).
+ * `params` are plain strings substituted into the template's {{1}}, {{2}}, ...
+ * body variables, in order. Omit/empty if the template has no variables.
+ */
+export async function sendTemplate(to, name, language, params = []) {
+  await post({
+    messaging_product: "whatsapp",
+    recipient_type: "individual",
+    to,
+    type: "template",
+    template: {
+      name,
+      language: { code: language },
+      ...(params.length
+        ? { components: [{ type: "body", parameters: params.map((text) => ({ type: "text", text })) }] }
+        : {}),
+    },
+  });
+}
+
 /** Upload a base64 image to WhatsApp's media store; returns a media id for sendImage. */
 export async function uploadMedia(base64, mimeType) {
   const form = new FormData();

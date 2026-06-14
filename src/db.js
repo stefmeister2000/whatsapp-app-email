@@ -54,6 +54,14 @@ db.exec(`
     results TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
+
+  CREATE TABLE IF NOT EXISTS knowledge_pages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    url TEXT NOT NULL UNIQUE,
+    title TEXT,
+    content TEXT NOT NULL,
+    scraped_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
 `);
 
 // Migration: add `lists` column to pre-existing leads tables.
@@ -188,6 +196,22 @@ export function listBroadcasts() {
     .prepare("SELECT * FROM broadcasts ORDER BY id DESC LIMIT 50")
     .all()
     .map((b) => ({ ...b, results: JSON.parse(b.results || "[]") }));
+}
+
+// --- knowledge pages (scanned from orvionresearch.com, added to the AI's knowledge base) ---
+const upsertKnowledgePageStmt = db.prepare(`
+  INSERT INTO knowledge_pages (url, title, content, scraped_at)
+  VALUES (?, ?, ?, datetime('now'))
+  ON CONFLICT(url) DO UPDATE SET title = excluded.title, content = excluded.content, scraped_at = excluded.scraped_at
+`);
+export function upsertKnowledgePage(url, title, content) {
+  upsertKnowledgePageStmt.run(url, title, content);
+}
+export function listKnowledgePages() {
+  return db.prepare("SELECT * FROM knowledge_pages ORDER BY scraped_at DESC").all();
+}
+export function deleteKnowledgePage(id) {
+  return db.prepare("DELETE FROM knowledge_pages WHERE id = ?").run(id).changes;
 }
 
 // --- follow-up eligibility ---
