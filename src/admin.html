@@ -24,8 +24,11 @@
   .convo-list-header { padding: 10px 14px; border-bottom: 1px solid #f0f0f0; }
   .convo-list-header .btn { width: 100%; }
   #convo-items { overflow-y: auto; flex: 1; }
-  .convo { padding: 12px 14px; border-bottom: 1px solid #f0f0f0; cursor: pointer; }
+  .convo { padding: 12px 14px; border-bottom: 1px solid #f0f0f0; cursor: pointer; border-left: 4px solid transparent; }
   .convo:hover, .convo.sel { background: #e8f5f0; }
+  .convo.esc-high { border-left-color: #c0392b; background: #fdf1f0; }
+  .convo.esc-normal { border-left-color: #b9770e; background: #fdf8ec; }
+  .convo.esc-low { border-left-color: #1e8449; background: #effaf3; }
   .convo .who { font-weight: 600; font-size: 14px; }
   .convo .preview { font-size: 12.5px; color: #667; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
   .convo .meta { font-size: 11px; color: #99a; margin-top: 2px; }
@@ -311,9 +314,21 @@
     $("esc-badge").textContent = s.open_escalations;
 
     // Inbox
+    // Open escalations per user, keeping the highest urgency (high > normal > low).
+    const URGENCY_RANK = { high: 3, normal: 2, low: 1 };
+    const escByUser = {};
+    for (const e of data.escalations) {
+      if (e.resolved) continue;
+      if (!escByUser[e.user] || URGENCY_RANK[e.urgency] > URGENCY_RANK[escByUser[e.user]]) {
+        escByUser[e.user] = e.urgency;
+      }
+    }
     $("convo-items").innerHTML = data.conversations.map((c) =>
-      '<div class="convo' + (c.user === selectedUser ? " sel" : "") + '" data-user="' + esc(c.user) + '">' +
-      '<div class="who">' + esc(c.lead_name || c.user) + "</div>" +
+      '<div class="convo' + (c.user === selectedUser ? " sel" : "") +
+      (escByUser[c.user] ? " esc-" + esc(escByUser[c.user]) : "") +
+      '" data-user="' + esc(c.user) + '">' +
+      '<div class="who">' + esc(c.lead_name || c.user) +
+      (escByUser[c.user] ? ' <span class="pill ' + esc(escByUser[c.user]) + '">escalated</span>' : "") + "</div>" +
       '<div class="preview">' + esc(c.last_body) + "</div>" +
       '<div class="meta">' + esc(c.lead_name ? c.user + " · " : "") + c.message_count + " msgs · " + fmtTime(c.last_at) + "</div></div>",
     ).join("") || '<div class="convo">No conversations yet</div>';
@@ -605,7 +620,7 @@
       '<textarea class="fu-message" placeholder="Follow-up message…">' + esc(c.message) + "</textarea>" +
       '<div class="formrow" style="margin-top:10px">' +
         '<label><input type="checkbox" class="fu-enabled" ' + (c.enabled ? "checked" : "") + " /> Enabled</label>" +
-        '<label>Per week: <input type="number" class="fu-perweek" min="1" max="7" value="' + (c.per_week ?? 2) + '" /></label>' +
+        '<label>Send after quiet for <input type="number" class="fu-quiethours" min="1" max="168" value="' + (c.quiet_hours ?? 24) + '" /> hours</label>' +
         '<label>Stop after <input type="number" class="fu-max" min="1" max="10" value="' + (c.max_per_lead ?? 3) + '" /> without a reply</label>' +
         '<span class="eligible">' + (c.eligible_now ?? 0) + " eligible now</span>" +
       "</div></div>",
@@ -629,7 +644,7 @@
   }
 
   $("fu-add").addEventListener("click", () => {
-    campaignsCache.push({ id: null, name: "New campaign", list: "", message: "", enabled: false, per_week: 2, max_per_lead: 3, eligible_now: 0 });
+    campaignsCache.push({ id: null, name: "New campaign", list: "", message: "", enabled: false, quiet_hours: 24, max_per_lead: 3, eligible_now: 0 });
     renderCampaigns();
   });
 
@@ -640,7 +655,7 @@
       list: card.querySelector(".fu-list").value,
       message: card.querySelector(".fu-message").value.trim(),
       enabled: card.querySelector(".fu-enabled").checked,
-      per_week: card.querySelector(".fu-perweek").value,
+      quiet_hours: card.querySelector(".fu-quiethours").value,
       max_per_lead: card.querySelector(".fu-max").value,
     }));
     const r = await api("/api/admin/followups", { method: "POST", body: JSON.stringify({ campaigns }) });

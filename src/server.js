@@ -259,7 +259,7 @@ app.post("/api/admin/followups", requireAdmin, (req, res) => {
     list: (c.list || "").trim(),
     message: (c.message || "").trim(),
     enabled: !!c.enabled,
-    per_week: Math.min(7, Math.max(1, Number(c.per_week) || 2)),
+    quiet_hours: Math.min(168, Math.max(1, Number(c.quiet_hours) || 24)),
     max_per_lead: Math.min(10, Math.max(1, Number(c.max_per_lead) || 3)),
   }));
   saveCampaigns(campaigns);
@@ -368,7 +368,9 @@ async function handleMessage(message) {
 
   console.log(`[in] ${from}: ${logLabel}`);
   logMessage(from, "in", logLabel, message.type === "image" ? "image" : "text");
-  upsertLead({ phone: from }); // ensure every WhatsApp contact appears in Leads, even before save_lead
+  // Every WhatsApp contact already consented to marketing on the website, so
+  // mark them as a consented lead and tag them for follow-up campaigns.
+  upsertLead({ phone: from, marketing_consent: true, lists: ["WhatsApp contacts"] });
   await markReadWithTyping(message.id);
 
   try {

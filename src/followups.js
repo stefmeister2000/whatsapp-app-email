@@ -2,9 +2,9 @@
 // Each campaign (set from the admin Follow-ups tab, stored in settings under
 // "followup_campaigns") looks like:
 //   { id, name, list (optional list/category filter, "" = everyone), message,
-//     enabled, per_week (1-7), max_per_lead }
+//     enabled, quiet_hours, max_per_lead }
 // Cadence: a contact is eligible for a campaign when their conversation has
-// been quiet for 7/per_week days AND they've received fewer than max_per_lead
+// been quiet for quiet_hours AND they've received fewer than max_per_lead
 // follow-ups from THIS campaign since their last reply. A reply resets the counter.
 import { getSetting, setSetting, followupCandidates, logMessage } from "./db.js";
 import { sendText } from "./whatsapp.js";
@@ -21,7 +21,7 @@ export function saveCampaigns(campaigns) {
 
 export function eligibleForCampaign(campaign) {
   if (!campaign.message) return [];
-  const quietMs = (7 / Math.max(1, campaign.per_week)) * 24 * 3600 * 1000;
+  const quietMs = Math.max(1, campaign.quiet_hours) * 3600 * 1000;
   const cutoff = Date.now() - quietMs;
   return followupCandidates(campaign.id, campaign.list || null).filter((c) => {
     const lastAt = new Date(c.last_at.replace(" ", "T") + "Z").getTime();
