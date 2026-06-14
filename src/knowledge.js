@@ -35,6 +35,12 @@ Contact:
 - General inquiries answered by a real person within one business day.
 - Medical consultations: confidential WhatsApp consultation with a UAE-licensed physician; most patients are connected within minutes.
 
+Treatment pages (link to the specific page for the treatment being discussed, not just the homepage):
+- Weight Loss (GLP-1): https://orvionresearch.com/weight-loss
+- Hair Loss: https://orvionresearch.com/hair-loss
+- Men's Health: https://orvionresearch.com/mens-health
+- Peptides: https://orvionresearch.com/peptides
+
 Key platform features: UAE Licensed Physicians · MOH Registered Medication · Discreet Home
 Delivery · Cold-Chain Shipping · 100% Online Consult · Confidential & Encrypted · Pharmacy
 Partner Dispensing.
