@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { KNOWLEDGE_BASE } from "./knowledge.js";
-import { upsertLead, logEscalation, listKnowledgePages } from "./db.js";
+import { upsertLead, logEscalation, hasOpenEscalation, listKnowledgePages } from "./db.js";
 
 const client = new Anthropic(); // reads ANTHROPIC_API_KEY from env
 
@@ -192,6 +192,13 @@ function trimHistory(history) {
  * (Slack webhook, email, CRM ticket, forward to the team's WhatsApp).
  */
 async function escalateToHuman(userId, input) {
+  if (hasOpenEscalation(userId)) {
+    console.log(
+      `[ESCALATION][skipped, already open] ${userId}: ${input.reason}`,
+    );
+    return "An escalation for this customer is already open with the team — no need to log another one.";
+  }
+
   console.log(
     `[ESCALATION][${input.urgency}] ${userId}: ${input.reason}`,
   );

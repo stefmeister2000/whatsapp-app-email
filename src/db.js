@@ -252,6 +252,13 @@ export function logEscalation(user, reason, urgency) {
   insertEscalation.run(user, reason, urgency);
 }
 
+const hasOpenEscalationStmt = db.prepare(
+  "SELECT 1 FROM escalations WHERE user = ? AND resolved = 0 LIMIT 1",
+);
+export function hasOpenEscalation(user) {
+  return !!hasOpenEscalationStmt.get(user);
+}
+
 export function listEscalations() {
   // Unresolved first, then urgency (high → low), newest first within each group.
   return db
