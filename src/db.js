@@ -75,6 +75,12 @@ if (!leadCols.includes("lists")) {
   db.exec("ALTER TABLE leads ADD COLUMN lists TEXT NOT NULL DEFAULT '[]'");
 }
 
+// Migration: add `followups_opted_out` column to pre-existing conversation_state tables.
+const conversationStateCols = db.prepare("PRAGMA table_info(conversation_state)").all().map((c) => c.name);
+if (!conversationStateCols.includes("followups_opted_out")) {
+  db.exec("ALTER TABLE conversation_state ADD COLUMN followups_opted_out INTEGER NOT NULL DEFAULT 0");
+}
+
 // --- messages ---
 const insertMessage = db.prepare(
   "INSERT INTO messages (user, direction, kind, body) VALUES (?, ?, ?, ?)",
@@ -123,6 +129,17 @@ const setAiPausedStmt = db.prepare(`
 `);
 export function setAiPaused(user, paused) {
   setAiPausedStmt.run(user, paused ? 1 : 0);
+}
+
+// A contact who declines/opts out of a follow-up check-in stops receiving
+// further automatic follow-up campaign messages (set by the agent via the
+// stop_followups tool).
+const setFollowupsOptedOutStmt = db.prepare(`
+  INSERT INTO conversation_state (user, followups_opted_out) VALUES (?, ?)
+  ON CONFLICT(user) DO UPDATE SET followups_opted_out = excluded.followups_opted_out
+`);
+export function setFollowupsOptedOut(user, optedOut) {
+  setFollowupsOptedOutStmt.run(user, optedOut ? 1 : 0);
 }
 
 // --- leads ---
@@ -253,7 +270,7 @@ export function followupCandidates(campaignId, listFilter) {
        LEFT JOIN leads l ON l.phone = m.user
        WHERE m.user GLOB '[0-9]*' AND m.user NOT GLOB '*[^0-9]*'
          AND m.user NOT IN (SELECT user FROM escalations WHERE resolved = 0)
-         AND m.user NOT IN (SELECT user FROM conversation_state WHERE ai_paused = 1)
+         AND m.user NOT IN (SELECT user FROM conversation_state WHERE ai_paused = 1 OR followups_opted_out = 1)
        GROUP BY m.user
        HAVING last_in_id IS NOT NULL`,
     )
