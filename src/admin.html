@@ -23,6 +23,9 @@
   #convo-list { width: 320px; border-right: 1px solid #ddd; background: #fff; overflow-y: auto; display: flex; flex-direction: column; }
   .convo-list-header { padding: 10px 14px; border-bottom: 1px solid #f0f0f0; }
   .convo-list-header .btn { width: 100%; }
+  .convo-date-filter { display: flex; gap: 6px; margin-top: 8px; }
+  .convo-date-filter input[type=date] { flex: 1; padding: 6px 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px; }
+  .convo-date-filter .btn { width: auto; padding: 6px 10px; }
   #convo-items { overflow-y: auto; flex: 1; }
   .convo { padding: 12px 14px; border-bottom: 1px solid #f0f0f0; cursor: pointer; border-left: 4px solid transparent; }
   .convo:hover, .convo.sel { background: #e8f5f0; }
@@ -30,6 +33,7 @@
   .convo.esc-normal { border-left-color: #b9770e; background: #fdf8ec; }
   .convo.esc-low { border-left-color: #1e8449; background: #effaf3; }
   .convo .who { font-weight: 600; font-size: 14px; }
+  .convo .who-phone { font-weight: normal; font-size: 12px; color: #99a; }
   .convo .preview { font-size: 12.5px; color: #667; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
   .convo .meta { font-size: 11px; color: #99a; margin-top: 2px; }
   .thread-col { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
@@ -132,7 +136,13 @@
 
   <div class="pane" id="inbox">
     <div id="convo-list">
-      <div class="convo-list-header"><button class="btn ghost" id="new-chat-btn">+ New chat</button></div>
+      <div class="convo-list-header">
+        <button class="btn ghost" id="new-chat-btn">+ New chat</button>
+        <div class="convo-date-filter">
+          <input type="date" id="convo-date" title="Show conversations active on this date" />
+          <button class="btn ghost small" id="convo-date-clear" title="Clear date filter">×</button>
+        </div>
+      </div>
       <div id="convo-items"></div>
     </div>
     <div class="thread-col">
@@ -209,7 +219,7 @@
     <div class="tablewrap">
       <div class="card">
         <h2>Automatic follow-up campaigns</h2>
-        <div class="hint">Each campaign targets a list/category of leads (or everyone who's messaged you) and sends its own message on its own cadence to people who've gone quiet. A reply from a contact pauses their follow-ups for that campaign; the counter restarts when they write again. Checked every 30 minutes.</div>
+        <div class="hint">Each campaign targets a list/category of leads (or everyone who's messaged you) and sends its own message on its own cadence to people who've gone quiet. A reply from a contact pauses their follow-ups for that campaign; the counter restarts when they write again. Contacts with an open (unresolved) escalation are skipped until it's resolved. Checked every 30 minutes.</div>
         <div id="fu-campaigns"></div>
         <div class="formrow" style="margin-top:10px">
           <button class="btn ghost" id="fu-add">+ Add follow-up campaign</button>
@@ -318,6 +328,7 @@
   const $ = (id) => document.getElementById(id);
   const esc = (s) => (s ?? "").toString().replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const fmtTime = (t) => t ? new Date(t.replace(" ", "T") + "Z").toLocaleString([], { dateStyle: "short", timeStyle: "short" }) : "";
+  const localDate = (t) => t ? new Date(t.replace(" ", "T") + "Z").toLocaleDateString("en-CA") : "";
 
   async function api(path, opts = {}) {
     const res = await fetch(path, {
@@ -354,15 +365,20 @@
         escByUser[e.user] = e.urgency;
       }
     }
-    $("convo-items").innerHTML = data.conversations.map((c) =>
+    const dateFilter = $("convo-date").value;
+    const filteredConvos = dateFilter
+      ? data.conversations.filter((c) => localDate(c.last_at) === dateFilter)
+      : data.conversations;
+    $("convo-items").innerHTML = filteredConvos.map((c) =>
       '<div class="convo' + (c.user === selectedUser ? " sel" : "") +
       (escByUser[c.user] ? " esc-" + esc(escByUser[c.user]) : "") +
       '" data-user="' + esc(c.user) + '">' +
       '<div class="who">' + esc(c.lead_name || c.user) +
+      (c.lead_name ? ' <span class="who-phone">' + esc(c.user) + "</span>" : "") +
       (escByUser[c.user] ? ' <span class="pill ' + esc(escByUser[c.user]) + '">escalated</span>' : "") + "</div>" +
       '<div class="preview">' + esc(c.last_body) + "</div>" +
-      '<div class="meta">' + esc(c.lead_name ? c.user + " · " : "") + c.message_count + " msgs · " + fmtTime(c.last_at) + "</div></div>",
-    ).join("") || '<div class="convo">No conversations yet</div>';
+      '<div class="meta">' + c.message_count + " msgs · " + fmtTime(c.last_at) + "</div></div>",
+    ).join("") || ('<div class="convo">' + (dateFilter ? "No conversations on this date" : "No conversations yet") + "</div>");
     document.querySelectorAll(".convo[data-user]").forEach((el) =>
       el.addEventListener("click", () => { selectedUser = el.dataset.user; loadThread(); refresh(); }),
     );
@@ -419,10 +435,15 @@
     );
   }
 
+  let threadUser = null; // tracks which conversation is currently rendered in #thread
+
   async function loadThread() {
     if (!selectedUser) return;
     const data = await api("/api/admin/messages?user=" + encodeURIComponent(selectedUser));
-    $("thread").innerHTML = data.messages.map((m) =>
+    const thread = $("thread");
+    const isNewConvo = threadUser !== selectedUser;
+    const wasNearBottom = thread.scrollHeight - thread.scrollTop - thread.clientHeight < 50;
+    thread.innerHTML = data.messages.map((m) =>
       '<div class="bubble ' + m.direction + '">' +
       (m.kind === "image" ? "📷 " : "") +
       (m.kind === "broadcast" ? '<span class="tag">broadcast</span>' : "") +
@@ -430,7 +451,8 @@
       ((m.direction === "out" && (m.kind === "manual" || m.kind === "image")) ? '<span class="tag">team</span>' : "") +
       esc(m.body) + '<span class="time">' + fmtTime(m.created_at) + "</span></div>",
     ).join("") || '<div class="empty">No messages</div>';
-    $("thread").scrollTop = $("thread").scrollHeight;
+    if (isNewConvo || wasNearBottom) thread.scrollTop = thread.scrollHeight;
+    threadUser = selectedUser;
     updateComposerState();
   }
 
@@ -494,6 +516,13 @@
     } finally {
       $("composer-send").disabled = !selectedUser;
     }
+  });
+
+  // --- Inbox date filter ---
+  $("convo-date").addEventListener("change", refresh);
+  $("convo-date-clear").addEventListener("click", () => {
+    $("convo-date").value = "";
+    refresh();
   });
 
   // --- New chat ---

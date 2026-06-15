@@ -227,6 +227,7 @@ export function followupCandidates(campaignId, listFilter) {
        FROM messages m
        LEFT JOIN leads l ON l.phone = m.user
        WHERE m.user GLOB '[0-9]*' AND m.user NOT GLOB '*[^0-9]*'
+         AND m.user NOT IN (SELECT user FROM escalations WHERE resolved = 0)
        GROUP BY m.user
        HAVING last_in_id IS NOT NULL`,
     )
