@@ -37,12 +37,18 @@
   .convo .preview { font-size: 12.5px; color: #667; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
   .convo .meta { font-size: 11px; color: #99a; margin-top: 2px; }
   .thread-col { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+  .thread-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 16px; background: #fff; border-bottom: 1px solid #ddd; }
+  .thread-header .who { font-weight: 600; font-size: 14px; }
+  .thread-header .who-phone { font-weight: normal; font-size: 12px; color: #99a; margin-left: 6px; }
+  .ai-paused-banner { background: #fef5e7; color: #b9770e; font-size: 12.5px; padding: 6px 16px; border-bottom: 1px solid #f7dc6f; }
   #thread { flex: 1; overflow-y: auto; padding: 20px; background: #efe7dd; display: flex; flex-direction: column; gap: 6px; }
-  .bubble { max-width: 65%; padding: 8px 12px; border-radius: 8px; font-size: 14px; line-height: 1.4; white-space: pre-wrap; box-shadow: 0 1px 1px rgba(0,0,0,0.08); }
+  .bubble { position: relative; max-width: 65%; padding: 8px 12px; border-radius: 8px; font-size: 14px; line-height: 1.4; white-space: pre-wrap; box-shadow: 0 1px 1px rgba(0,0,0,0.08); }
   .bubble.in { align-self: flex-start; background: #fff; }
   .bubble.out { align-self: flex-end; background: #d9fdd3; }
   .bubble .tag { display:inline-block; font-size: 10px; font-weight: 700; color: #b9770e; margin-right: 5px; text-transform: uppercase; }
   .bubble .time { display: block; font-size: 10.5px; color: #889; text-align: right; margin-top: 3px; }
+  .bubble .bubble-del { display: none; position: absolute; top: 2px; right: 4px; background: none; border: none; color: #c0392b; font-size: 13px; line-height: 1; cursor: pointer; padding: 2px 5px; }
+  .bubble:hover .bubble-del { display: block; }
   .empty { color: #889; font-size: 14px; margin: auto; }
 
   /* Composer */
@@ -146,6 +152,14 @@
       <div id="convo-items"></div>
     </div>
     <div class="thread-col">
+      <div id="thread-header" class="thread-header" hidden>
+        <div>
+          <span class="who" id="thread-header-name"></span>
+          <span class="who-phone" id="thread-header-phone"></span>
+        </div>
+        <button class="btn small ghost" id="ai-pause-toggle">Pause AI</button>
+      </div>
+      <div id="ai-paused-banner" class="ai-paused-banner" hidden>AI replies are paused for this contact — only messages sent by the team will go out.</div>
       <div id="thread"><div class="empty">Select a conversation</div></div>
       <div id="composer">
         <div class="hint-bar" id="composer-hint">Select a conversation or start a new chat to send a message.</div>
@@ -313,6 +327,7 @@
 <script>
   let KEY = sessionStorage.getItem("adminkey") || "";
   let selectedUser = null;
+  let conversationsCache = [];
   let leadsCache = [];
   let listsCache = [];
   let campaignsCache = [];
@@ -348,6 +363,7 @@
     const data = await api("/api/admin/overview");
     const s = data.stats;
     leadsCache = data.leads;
+    conversationsCache = data.conversations;
     $("stats").innerHTML =
       "<span><b>" + s.conversations + "</b> chats</span><span><b>" + s.messages + "</b> messages</span>" +
       "<span><b>" + s.leads + "</b> leads</span><span><b>" + s.emails + "</b> emails</span>" +
@@ -375,7 +391,8 @@
       '" data-user="' + esc(c.user) + '">' +
       '<div class="who">' + esc(c.lead_name || c.user) +
       (c.lead_name ? ' <span class="who-phone">' + esc(c.user) + "</span>" : "") +
-      (escByUser[c.user] ? ' <span class="pill ' + esc(escByUser[c.user]) + '">escalated</span>' : "") + "</div>" +
+      (escByUser[c.user] ? ' <span class="pill ' + esc(escByUser[c.user]) + '">escalated</span>' : "") +
+      (c.ai_paused ? ' <span class="pill no">AI paused</span>' : "") + "</div>" +
       '<div class="preview">' + esc(c.last_body) + "</div>" +
       '<div class="meta">' + c.message_count + " msgs · " + fmtTime(c.last_at) + "</div></div>",
     ).join("") || ('<div class="convo">' + (dateFilter ? "No conversations on this date" : "No conversations yet") + "</div>");
@@ -449,12 +466,50 @@
       (m.kind === "broadcast" ? '<span class="tag">broadcast</span>' : "") +
       (m.kind.startsWith("followup") ? '<span class="tag">follow-up</span>' : "") +
       ((m.direction === "out" && (m.kind === "manual" || m.kind === "image")) ? '<span class="tag">team</span>' : "") +
-      esc(m.body) + '<span class="time">' + fmtTime(m.created_at) + "</span></div>",
+      esc(m.body) + '<span class="time">' + fmtTime(m.created_at) + "</span>" +
+      '<button class="bubble-del" data-del-msg="' + m.id + '" title="Delete message">×</button></div>',
     ).join("") || '<div class="empty">No messages</div>';
     if (isNewConvo || wasNearBottom) thread.scrollTop = thread.scrollHeight;
     threadUser = selectedUser;
+    document.querySelectorAll("[data-del-msg]").forEach((b) =>
+      b.addEventListener("click", async (ev) => {
+        ev.stopPropagation();
+        if (!confirm("Delete this message from the log? This does not unsend it on WhatsApp.")) return;
+        await api("/api/admin/messages/" + b.dataset.delMsg, { method: "DELETE" });
+        loadThread();
+      }),
+    );
+    updateThreadHeader();
     updateComposerState();
   }
+
+  // --- AI pause toggle ---
+  function updateThreadHeader() {
+    if (!selectedUser) {
+      $("thread-header").hidden = true;
+      $("ai-paused-banner").hidden = true;
+      return;
+    }
+    const convo = conversationsCache.find((c) => c.user === selectedUser);
+    $("thread-header").hidden = false;
+    $("thread-header-name").textContent = (convo && convo.lead_name) || selectedUser;
+    $("thread-header-phone").textContent = (convo && convo.lead_name) ? selectedUser : "";
+    const paused = !!(convo && convo.ai_paused);
+    $("ai-pause-toggle").textContent = paused ? "Resume AI" : "Pause AI";
+    $("ai-paused-banner").hidden = !paused;
+  }
+
+  $("ai-pause-toggle").addEventListener("click", async () => {
+    if (!selectedUser) return;
+    const convo = conversationsCache.find((c) => c.user === selectedUser);
+    const paused = !(convo && convo.ai_paused);
+    await api("/api/admin/conversations/" + encodeURIComponent(selectedUser) + "/pause", {
+      method: "POST",
+      body: JSON.stringify({ paused }),
+    });
+    await refresh();
+    updateThreadHeader();
+  });
 
   // --- Composer (manual team replies / new chats) ---
   function updateComposerState() {

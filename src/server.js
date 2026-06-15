@@ -3,11 +3,12 @@ import express from "express";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { generateReply, resetConversation } from "./agent.js";
-import { sendText, sendTemplate, sendImage, uploadMedia, markReadWithTyping, downloadMedia } from "./whatsapp.js";
+import { sendText, sendTemplate, sendImage, uploadMedia, markRead, markReadWithTyping, downloadMedia } from "./whatsapp.js";
 import {
   logMessage,
   listConversations,
   listMessages,
+  deleteMessage,
   listLeads,
   allLists,
   listEscalations,
@@ -23,6 +24,8 @@ import {
   listKnowledgePages,
   upsertKnowledgePage,
   deleteKnowledgePage,
+  isAiPaused,
+  setAiPaused,
 } from "./db.js";
 import {
   getCampaigns,
@@ -133,6 +136,16 @@ app.get("/api/admin/messages", requireAdmin, (req, res) => {
   const user = req.query.user;
   if (!user) return res.status(400).json({ error: "user required" });
   res.json({ messages: listMessages(user) });
+});
+app.delete("/api/admin/messages/:id", requireAdmin, (req, res) => {
+  res.json({ ok: true, deleted: deleteMessage(Number(req.params.id)) });
+});
+
+// Pause/resume the AI for one conversation — e.g. when the team takes over an escalation.
+// While paused, incoming messages are logged but the agent does not auto-reply or send follow-ups.
+app.post("/api/admin/conversations/:user/pause", requireAdmin, (req, res) => {
+  setAiPaused(req.params.user, !!req.body?.paused);
+  res.json({ ok: true });
 });
 
 // Manual send from the team — starts a new conversation or replies in an existing one.
@@ -345,6 +358,22 @@ async function handleMessage(message) {
   if (alreadyProcessed(message.id)) return;
 
   const from = message.from; // WhatsApp number of the sender
+
+  // The team has taken over this conversation — log the message for the inbox
+  // but don't auto-reply (no canned replies, no AI, no follow-ups).
+  if (isAiPaused(from)) {
+    let label;
+    if (message.type === "text") label = message.text.body;
+    else if (message.type === "interactive") label = message.interactive?.button_reply?.title || message.interactive?.list_reply?.title;
+    else if (message.type === "image") label = `[image] ${message.image?.caption?.trim() || "(no caption)"}`;
+    else if (message.type === "audio") label = "[voice note]";
+    else label = `[${message.type}]`;
+    console.log(`[in, AI paused] ${from}: ${label}`);
+    logMessage(from, "in", label, message.type === "image" ? "image" : "text");
+    upsertLead({ phone: from, marketing_consent: true, lists: ["WhatsApp contacts"] });
+    await markRead(message.id);
+    return;
+  }
 
   const SUPPORTED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
 

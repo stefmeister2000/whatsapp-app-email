@@ -62,6 +62,11 @@ db.exec(`
     content TEXT NOT NULL,
     scraped_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
+
+  CREATE TABLE IF NOT EXISTS conversation_state (
+    user TEXT PRIMARY KEY,
+    ai_paused INTEGER NOT NULL DEFAULT 0
+  );
 `);
 
 // Migration: add `lists` column to pre-existing leads tables.
@@ -85,9 +90,11 @@ export function listConversations() {
               COUNT(*) AS message_count,
               MAX(m.created_at) AS last_at,
               (SELECT body FROM messages WHERE user = m.user ORDER BY id DESC LIMIT 1) AS last_body,
-              l.name AS lead_name
+              l.name AS lead_name,
+              COALESCE(cs.ai_paused, 0) AS ai_paused
        FROM messages m
        LEFT JOIN leads l ON l.phone = m.user
+       LEFT JOIN conversation_state cs ON cs.user = m.user
        GROUP BY m.user
        ORDER BY last_at DESC`,
     )
@@ -98,6 +105,24 @@ export function listMessages(user, limit = 500) {
   return db
     .prepare("SELECT * FROM messages WHERE user = ? ORDER BY id ASC LIMIT ?")
     .all(user, limit);
+}
+
+export function deleteMessage(id) {
+  return db.prepare("DELETE FROM messages WHERE id = ?").run(id).changes;
+}
+
+// --- conversation state (per-contact AI pause) ---
+const isAiPausedStmt = db.prepare("SELECT ai_paused FROM conversation_state WHERE user = ?");
+export function isAiPaused(user) {
+  const row = isAiPausedStmt.get(user);
+  return !!(row && row.ai_paused);
+}
+const setAiPausedStmt = db.prepare(`
+  INSERT INTO conversation_state (user, ai_paused) VALUES (?, ?)
+  ON CONFLICT(user) DO UPDATE SET ai_paused = excluded.ai_paused
+`);
+export function setAiPaused(user, paused) {
+  setAiPausedStmt.run(user, paused ? 1 : 0);
 }
 
 // --- leads ---
@@ -228,6 +253,7 @@ export function followupCandidates(campaignId, listFilter) {
        LEFT JOIN leads l ON l.phone = m.user
        WHERE m.user GLOB '[0-9]*' AND m.user NOT GLOB '*[^0-9]*'
          AND m.user NOT IN (SELECT user FROM escalations WHERE resolved = 0)
+         AND m.user NOT IN (SELECT user FROM conversation_state WHERE ai_paused = 1)
        GROUP BY m.user
        HAVING last_in_id IS NOT NULL`,
     )

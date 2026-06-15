@@ -129,6 +129,15 @@ export async function downloadMedia(mediaId) {
   return { base64: buffer.toString("base64"), mimeType: meta.mime_type };
 }
 
+/** Mark the incoming message as read, without a typing indicator (e.g. when the AI is paused). */
+export async function markRead(messageId) {
+  try {
+    await post({ messaging_product: "whatsapp", status: "read", message_id: messageId });
+  } catch (err) {
+    console.warn("mark-read failed:", err.message);
+  }
+}
+
 /** Mark the incoming message as read and show a typing indicator while Claude thinks. */
 export async function markReadWithTyping(messageId) {
   try {
