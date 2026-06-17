@@ -121,10 +121,9 @@ systemic side effects.
 Discreet PDE5 therapy from a UAE doctor. End-to-end erectile dysfunction care via ORVION Vital™,
 a compounded capsule combining Sildenafil and Tadalafil.
 
-Plans:
-- Essential — AED 299/month: Sildenafil 25 mg + Tadalafil 5 mg, 15 capsules/month.
-- Premium — AED 349/month: Sildenafil 50 mg + Tadalafil 10 mg, 15 capsules/month.
-Both include UAE doctor supervision and unlimited follow-ups, no extra consultation fees.
+Product: ORVION Vital™ — AED 299/month. One dual-action capsule per dose, 15 capsules/month.
+The exact Sildenafil and Tadalafil strengths are personalized by the doctor after reviewing the patient's intake assessment — the doctor selects the right dose for that specific patient. No separate plans; there is only one product at one price.
+Includes UAE doctor supervision, unlimited follow-ups, and free discreet delivery — no extra consultation or pharmacy fees.
 
 How it works: (1) 3-minute secure online questionnaire (erectile function history, medical
 conditions); (2) Doctor approval within 24 hours — UAE-licensed physician reviews and prescribes
