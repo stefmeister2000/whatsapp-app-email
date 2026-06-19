@@ -117,6 +117,72 @@
   #lists-items .formrow { flex-direction: row; align-items: center; justify-content: space-between; }
   #lists-modal .formrow.addrow { flex-direction: row; gap: 8px; }
   #lists-modal .formrow.addrow input { flex: 1; }
+
+  /* ── Mobile / phone layout ────────────────────────────── */
+  .back-btn { display: none; }
+
+  @media (max-width: 640px) {
+    /* Header */
+    header { padding: 10px 12px; gap: 8px; flex-wrap: wrap; }
+    header h1 { font-size: 13px; }
+    .stats { display: none; }
+
+    /* Nav: horizontal scroll */
+    nav { overflow-x: auto; -webkit-overflow-scrolling: touch; padding: 0 6px; gap: 0; }
+    nav::-webkit-scrollbar { display: none; }
+    nav button { padding: 10px 11px; font-size: 12.5px; white-space: nowrap; }
+
+    /* Inbox — single-column panel switching */
+    #inbox { position: relative; overflow: hidden; }
+    #convo-list { position: absolute; inset: 0; width: 100%; z-index: 2; transform: translateX(0); transition: transform 0.22s ease; }
+    .thread-col { position: absolute; inset: 0; z-index: 1; transform: translateX(100%); transition: transform 0.22s ease; display: flex; flex-direction: column; }
+    #inbox.show-thread #convo-list { transform: translateX(-100%); }
+    #inbox.show-thread .thread-col { transform: translateX(0); z-index: 2; }
+    .back-btn { display: inline-flex; align-items: center; font-size: 14px; padding: 6px 10px; flex-shrink: 0; }
+
+    /* Thread header tighter */
+    .thread-header { gap: 6px; padding: 8px 10px; }
+    .thread-header > div { flex: 1; min-width: 0; overflow: hidden; }
+    .thread-header .who { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+    .thread-header .who-phone { font-size: 11px; }
+
+    /* Bubbles */
+    #thread { padding: 10px; gap: 5px; }
+    .bubble { max-width: 85%; font-size: 13px; }
+    /* Delete button always visible on touch screens */
+    .bubble .bubble-del { display: block; top: 3px; right: 3px; font-size: 15px; padding: 3px 6px; }
+
+    /* Composer */
+    #composer { padding: 8px 10px; }
+    #composer .composer-row { gap: 5px; }
+    #composer textarea { font-size: 16px; } /* prevents iOS zoom */
+
+    /* Tables: horizontal scroll */
+    .tablewrap { padding: 10px; gap: 10px; }
+    .tablewrap > table, .card table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; white-space: nowrap; }
+    th, td { font-size: 12.5px; padding: 8px 10px; }
+
+    /* Cards */
+    .card { padding: 14px; }
+    .fu-card { padding: 12px; }
+    .fu-card .formrow > label { flex-direction: row; align-items: center; }
+    .fu-card textarea { font-size: 16px; }
+
+    /* Modals: full-width, scrollable */
+    #lead-modal .card, #newchat-modal .card, #lists-modal .card {
+      width: calc(100vw - 24px);
+      max-height: 90dvh;
+      overflow-y: auto;
+    }
+
+    /* Login */
+    #login { width: calc(100vw - 32px); max-width: 320px; padding: 22px; }
+  }
+
+  @media (hover: none) {
+    /* On touch devices, always show delete button (no hover available) */
+    .bubble .bubble-del { display: block; }
+  }
 </style>
 </head>
 <body>
@@ -153,6 +219,7 @@
     </div>
     <div class="thread-col">
       <div id="thread-header" class="thread-header" hidden>
+        <button class="btn small ghost back-btn" id="back-btn">‹ Back</button>
         <div>
           <span class="who" id="thread-header-name"></span>
           <span class="who-phone" id="thread-header-phone"></span>
@@ -456,6 +523,7 @@
 
   async function loadThread() {
     if (!selectedUser) return;
+    $("inbox").classList.add("show-thread");
     const data = await api("/api/admin/messages?user=" + encodeURIComponent(selectedUser));
     const thread = $("thread");
     const isNewConvo = threadUser !== selectedUser;
@@ -498,6 +566,14 @@
     $("ai-pause-toggle").textContent = paused ? "Resume AI" : "Pause AI";
     $("ai-paused-banner").hidden = !paused;
   }
+
+  $("back-btn").addEventListener("click", () => {
+    selectedUser = null;
+    $("inbox").classList.remove("show-thread");
+    $("thread-header").hidden = true;
+    $("ai-paused-banner").hidden = true;
+    updateComposerState();
+  });
 
   $("ai-pause-toggle").addEventListener("click", async () => {
     if (!selectedUser) return;
