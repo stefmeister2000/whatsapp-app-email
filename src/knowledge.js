@@ -137,6 +137,12 @@ Eligibility: doctor reviews heart, blood pressure, and nitrate medication histor
 Track record: 400+ patients treated · 98% satisfaction · 24-hour approval window · 100% discreet delivery.
 Subscription is fully cancellable, no commitments. Direct messaging with the assigned doctor for adjustments.
 
+## Endurance Spray (OTC — for premature ejaculation)
+Topical delay spray for premature ejaculation. AED 79 per pack. Listed on the Men's Health page: https://orvionresearch.com/mens-health
+OTC, no prescription required — no consultation, no doctor approval, no intake questionnaire needed. Customer can buy it directly.
+Fast-acting, discreet. Clinically studied to support longer performance.
+This is a separate, unrelated product from ORVION Vital™ (which is prescription-only for ED and does require the doctor intake). Don't conflate the two — if a customer's concern is premature ejaculation specifically, this spray is the relevant product; if it's erectile dysfunction, ORVION Vital™ is.
+
 # SERVICE LINE 4 — PEPTIDES
 
 Pharmaceutical-grade peptide protocols — sourced, compounded, and delivered with clinical
